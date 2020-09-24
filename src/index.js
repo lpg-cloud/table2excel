@@ -1,22 +1,18 @@
-/* eslint-disable camelcase */
-/* eslint-disable guard-for-in */
-/* eslint-disable no-restricted-syntax */
-/* eslint-disable no-shadow */
-/* eslint-disable prefer-const */
-/* eslint-disable no-redeclare */
-/* eslint-disable block-scoped-var */
-import {
-  saveAs,
-} from 'filesaver.js';
 import 'xlsx-style/dist/xlsx.core.min';
-import dataToWorksheet from './helpers/data-to-worksheet';
+
+import { saveAs } from 'filesaver.js';
+
 import tableToData from './helpers/table-to-data';
-import booleanHandler from './types/boolean';
-import dateHandler from './types/date';
-import inputHandler from './types/input';
+import dataToWorksheet from './helpers/data-to-worksheet';
+
+import {decodeCell, decodeRange } from './helpers/decode-cell.js';
+import {encodeCell, encodeRange } from './helpers/encode-cell.js';
+
 import listHandler from './types/list';
 import numberHandler from './types/number';
-
+import dateHandler from './types/date';
+import inputHandler from './types/input';
+import booleanHandler from './types/boolean';
 
 /**
  * @param {string} defaultFileName - The file name if download
@@ -28,15 +24,27 @@ import numberHandler from './types/number';
 const defaultOptions = {
   defaultFileName: 'file',
   tableNameDataAttribute: 'excel-name',
+
+  /**
+   * The event will be fired before add worksheet
+   * into workbook
+   *
+   * @param {object} worksheet
+   * @param {string} name - worksheet name
+   * @returns {object} worksheet
+   */
+  beforeWorksheetAdded: (worksheet, name)=>{
+    return worksheet;
+  },
   titleStyle:{
-    fill: {
-      bgColor: {
-        indexed: 64,
-      },
-      fgColor: {
-        rgb: 'FFFF00',
-      },
-    },
+    // fill: {
+    //   bgColor: {
+    //     indexed: 64,
+    //   },
+    //   fgColor: {
+    //     rgb: 'FFFF00',
+    //   },
+    // },
     font: {
       bold: true,
     },
@@ -89,17 +97,27 @@ export default class Table2Excel {
   getWorkbook(tables) {
     return Array.from(tables.length ? tables : [tables])
       .reduce((workbook, table, index) => {
-        const dataName = table.getAttribute(`data-${this.tableNameDataAttribute}`);
+        let dataName = '';
+
+        if (table.querySelector('caption')){
+          dataName = table.querySelector('caption').innerText;
+        } else {
+          dataName = table.getAttribute(`data-${this.tableNameDataAttribute}`);
+        }
+
         const name = dataName || (index + 1).toString();
 
+        let worksheet = this.getWorksheet(table);
+
+        if (typeof this.beforeWorksheetAdded === 'function'){
+          worksheet = this.beforeWorksheetAdded(worksheet, name);
+        }
+
         workbook.SheetNames.push(name);
-        workbook.Sheets[name] = this.getWorksheet(table);
+        workbook.Sheets[name] = worksheet;
 
         return workbook;
-      }, {
-        SheetNames: [],
-        Sheets: {},
-      });
+      }, { SheetNames: [], Sheets: {} });
   }
 
   /**
@@ -114,6 +132,70 @@ export default class Table2Excel {
     }
 
     return dataToWorksheet(tableToData(table), typeHandlers);
+  }
+
+
+  /**
+   * Change top-left table corner.
+   * At the same time there is a shift of all internal objects
+   *
+   * @param {object} WS - worksheet object
+   * @param {object} newPos - new top-left coordinate
+   * @returns {object}
+   */
+  depositionWorksheetTable(WS = {}, newPos = {c: 0, r:0 }){
+    let decodeCellItem = {},
+      decodeRangeItem = {},
+      newWS = {
+        '!merges': [],
+        '!ref': '',
+      };
+
+    for (let key in WS) {
+      switch(key){
+        case '!merges':
+          for (let mergeKey in WS[key]) {
+            newWS['!merges'].push({
+              e: {
+                c: WS[key][mergeKey].e.c + newPos.c,
+                r: WS[key][mergeKey].e.r + newPos.r,
+              },
+              s: {
+                c: WS[key][mergeKey].s.c + newPos.c,
+                r: WS[key][mergeKey].s.r + newPos.r,
+              },
+            });
+          }
+          break;
+        case '!ref':
+          decodeRangeItem = decodeRange(WS[key]);
+
+          /**
+           * We don't move start range position (A1)
+           */
+          decodeRangeItem.e.c += newPos.c;
+          decodeRangeItem.e.r += newPos.r;
+
+          newWS['!ref'] = encodeRange(decodeRangeItem);
+          break;
+        case '!cols':
+          newWS['!cols'] = WS[key];
+
+          for (let i = 0; i < newPos.c; i++){
+            newWS['!cols'].unshift(null);
+          }
+
+          break;
+        default:
+          decodeCellItem = decodeCell(key);
+          decodeCellItem.c += newPos.c;
+          decodeCellItem.r += newPos.r;
+
+          newWS[encodeCell(decodeCellItem)] = WS[key];
+          break;
+      }
+    }
+    return newWS;
   }
 
   /**
@@ -137,24 +219,24 @@ export default class Table2Excel {
       type: 'binary',
     });
 
-    const blob = new Blob([convert(data)], {
-      type: 'application/octet-stream',
-    });
+    const blob = new Blob([convert(data)], { type: 'application/octet-stream' });
     saveAs(blob, `${fileName}.xlsx`);
   }
-
-  /**
+    /**
    * 将获取到的tables转换导出到含有一个sheet的workbook中
-   * @param {object} tables 一个tables标签[html]对象
+   * @param {nodelist} tables 
    * @param {string} fileName 文件名
    * @param {object} titleStyle 一个cell的style对象
    */
   getWorkbookInOneSheet(tables, fileName = this.defaultFileName, titleStyle = this.titleStyle) {
-    let workbook = {
-      SheetNames: [fileName],
+
+    const confName = fileName.replace(/[/,\,?]/g,'_').substring(0,31);
+    const workbook = {
+      SheetNames: [confName],
       Sheets: {},
     };
-    let sheet = Array.from(tables.length ? tables : [tables]).reduce((workSheet, table) => {
+
+    const sheet = Array.from(tables.length ? tables : [tables]).reduce((workSheet, table) => {
       let worksheet = this.getWorksheet(table);
       const dataName = table.getAttribute(`data-${this.tableNameDataAttribute}`);
 
@@ -273,12 +355,12 @@ export default class Table2Excel {
     for (let i = 0;i< (maxCell.charCodeAt() - 'A'.charCodeAt());i++) {
       sheet['!cols'].push({ wpx: 100 });
     }
-
-    workbook.Sheets[fileName] = sheet;
-    this.download(workbook, fileName);
+    workbook.Sheets[confName] = sheet;
+    this.download(workbook, confName);
     return workbook;
   }
 }
+
 
 // add global reference to `window` if defined
 if (window) window.Table2Excel = Table2Excel;

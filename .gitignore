@@ -2,3 +2,5 @@
 npm-debug.log
 .idea
 node_modules
+table_old/oneSheetExcel.js
+table_old/table2excel.js

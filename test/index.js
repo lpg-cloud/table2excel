@@ -1,7 +1,8 @@
 import 'jsdom-global/register';
 import { expect } from 'chai';
 
-import '../dist/table2excel';
+//import '../dist/table2excel';
+import '../src/index'
 const Table2Excel = window.Table2Excel;
 
 describe('Tests', () => {
@@ -172,4 +173,9 @@ describe('Tests', () => {
     expect(worksheet.A1).to.have.property('t', 's');
     expect(worksheet.A1).to.have.property('v', 'foo');
   });
+
+  it('测试添加的函数',function(){
+    const table2excel = new Table2Excel();
+    let workbook=table2excel.getWorkbookInOneSheet();
+  })
 });

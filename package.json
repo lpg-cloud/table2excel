@@ -59,12 +59,13 @@
     "eslint-plugin-react": "^5.2.2",
     "jsdom": "^9.4.1",
     "jsdom-global": "^2.0.0",
-    "mocha": "^3.0.0",
+    "mocha": "^3.5.3",
     "mocha-jsdom": "^1.1.0",
     "script-loader": "^0.7.0",
     "webpack": "^1.15.0"
   },
   "dependencies": {
+    "filesaver": "0.0.13",
     "filesaver.js": "^0.2.0",
     "webpack-cli": "^3.3.12",
     "xlsx-style": "^0.8.13"
