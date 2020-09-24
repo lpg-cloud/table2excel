@@ -230,7 +230,7 @@ export default class Table2Excel {
    */
   getWorkbookInOneSheet(tables, fileName = this.defaultFileName, titleStyle = this.titleStyle) {
 
-    const confName = fileName.replace(/[/,\,?]/g,'_').substring(0,31);
+    const confName = fileName.replace(/[\/,\\,?,:,：,\[,\],*]/g,'_').substring(0,31);
     const workbook = {
       SheetNames: [confName],
       Sheets: {},
@@ -356,7 +356,7 @@ export default class Table2Excel {
       sheet['!cols'].push({ wpx: 100 });
     }
     workbook.Sheets[confName] = sheet;
-    this.download(workbook, confName);
+    this.download(workbook, fileName);
     return workbook;
   }
 }
